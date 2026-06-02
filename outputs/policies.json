@@ -1,0 +1,44 @@
+{
+  "document_request": {
+    "priority": null,
+    "escalate": true,
+    "route_to": null,
+    "instructions": null,
+    "abstain": true
+  },
+  "legal_sensitive": {
+    "priority": "high",
+    "escalate": true,
+    "route_to": "Compliance: regulated or legal-sensitive requests",
+    "instructions": "Customer requests legal or contractual interpretation.",
+    "abstain": false
+  },
+  "shipment_exception": {
+    "priority": "medium",
+    "escalate": true,
+    "route_to": "Operations lead: shipment exceptions",
+    "instructions": "Shipment exceptions must be escalated for human review.",
+    "abstain": false
+  },
+  "temperature_exception": {
+    "priority": "high",
+    "escalate": true,
+    "route_to": null,
+    "instructions": "Any urgent request involving delay, customs retention, or temperature-sensitive cargo must be escalated for human review.",
+    "abstain": false
+  },
+  "tracking_request": {
+    "priority": null,
+    "escalate": true,
+    "route_to": null,
+    "instructions": null,
+    "abstain": true
+  },
+  "pricing_dispute": {
+    "priority": "medium",
+    "escalate": true,
+    "route_to": "Pricing operations: pricing disputes",
+    "instructions": "Pricing disputes must be routed first to pricing operations, not commercial.",
+    "abstain": false
+  }
+}

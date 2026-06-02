@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+
+# Entorno virtual
+.venv/
+venv/
+env/
+
+# pytest
+.pytest_cache/
+
+# NLTK data descargado localmente
+nltk_data/
+
+# Variables de entorno
+.env
+
+# outputs/ no se ignora — policies.json se incluye para facilitar la ejecucion
+# Para regenerar: PYTHONPATH=src python generate_policies.py
