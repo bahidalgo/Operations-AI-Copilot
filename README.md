@@ -166,8 +166,10 @@ Temperatura: 0 para minimizar variabilidad entre ejecuciones, aunque con modelos
 | Componente | Métrica | Resultado |
 |---|---|---|
 | Embeddings (sobre test) | Type accuracy | 5/6 (~83%) |
-| LLM clasificador (sobre test) | Type accuracy | 100% (6/6) |
-| Sistema completo con agente (sobre test) | Casos correctamente enrutados | 5/6 (~83%) |
+| LLM clasificador con few-shot (sobre test) | Type accuracy | 6/6 (100%) |
+| Sistema completo con agente (sobre test) | Casos correctamente enrutados | 5-6/6 (variable) |
+
+Nota: el resultado del agente varía entre ejecuciones porque el LLM 3b no es completamente determinista en casos ambiguos, incluso con temperatura 0. Ver sección Riesgos y limitaciones.
 
 ---
 
@@ -177,9 +179,8 @@ Temperatura: 0 para minimizar variabilidad entre ejecuciones, aunque con modelos
 
 El agente toma decisiones secuenciales donde el resultado de cada paso determina el siguiente:
 1. Si confianza alta, usar embeddings directamente
-2. Si confianza baja, invocar LLM
-3. Si LLM falla, escalar a humano sin intentar más
-4. Si politica dice abstain, escalar sin inventar respuesta
+2. Si confianza baja, invocar LLM con few-shot prompting
+3. Si politica dice abstain, generar respuesta generica y escalar a humano
 
 Esto es un flujo condicional donde el agente decide qué herramienta usar y cuándo parar.
 
