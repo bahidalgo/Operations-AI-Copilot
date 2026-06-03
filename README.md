@@ -123,19 +123,19 @@ PYTHONPATH=src pytest tests/ -v
 
 ## Decisiones técnicas
 
-**Por qué embeddings y no TF-IDF:** TF-IDF no captura semántica — "refrigerated cargo" y "reefer deviation" son distintos para TF-IDF pero similares en significado. Los embeddings resuelven esto sin necesidad de más datos.
+**Por qué embeddings y no TF-IDF:** TF-IDF no captura semántica, por ejemplo "refrigerated cargo" y "reefer deviation" son distintos para TF-IDF pero similares en significado. Los embeddings resuelven esto sin necesidad de más datos.
 
 **Por qué Ollama local y no API externa:** presupuesto limitado y sin dependencia de conectividad. El costo por llamada es cero y el modelo queda en la infraestructura propia.
 
 **Por qué el JSON de políticas se genera offline:** las políticas son decisiones de negocio que un humano debe validar. Generarlas en runtime cada vez sería costoso, lento, y quitaría control al operador.
 
-**Por qué umbral de confianza 0.60:** ajustado empíricamente — con 0.50 algunos casos ambiguos pasaban con clasificación incorrecta. Un análisis de distribución con más datos permitiría ajustarlo con mayor rigor.
+**Por qué umbral de confianza 0.60:** ajustado empíricamente, pues con 0.50 algunos casos ambiguos pasaban con clasificación incorrecta. Un análisis de distribución con más datos permitiría ajustarlo con mayor rigor.
 
 ---
 
 ## Enfoque de ML
 
-### Clasificador principal — embeddings semanticos
+### Clasificador principal | embeddings semanticos
 
 Modelo: `all-MiniLM-L6-v2` (sentence-transformers, 80MB, CPU/GPU).
 Approach: cosine similarity sobre los embeddings del train set.
@@ -144,16 +144,16 @@ El modelo se carga una sola vez al arrancar y queda en memoria. Cada ticket nuev
 
 Se eligió este modelo porque:
 - Funciona bien con pocos ejemplos de train (no requiere cientos de datos por clase)
-- Captura semántica — "refrigerated cargo" y "reefer deviation" son similares aunque no compartan palabras
+- Captura semántica -> "refrigerated cargo" y "reefer deviation" son similares aunque no compartan palabras
 - Es rápido en inferencia (~15ms por ticket en CPU, menos en GPU)
 
 **Umbral de confianza:** 0.60. Si la similitud coseno con el vecino mas cercano es menor a este valor, la prediccion se considera insuficiente y se activa fallback con LLM. Este umbral fue ajustado empíricamente, con 0.50 algunos casos ambiguos pasaban con clasificacion incorrecta, pero para una versión más estable, se recomienda hacer un análisis de distribución.
 
-### Baseline — TF-IDF
+### Baseline | TF-IDF
 
 Se implementó un baseline con TF-IDF + KNN como punto de comparación, pero los resultados mostraron la limitación de los métodos estadísticos con pocos datos.
 
-### Clasificador de respaldo — LLM
+### Clasificador de respaldo | LLM
 
 Modelo: `llama3.2:3b` vía Ollama (local, sin API key, sin costo).
 Se usa únicamente cuando el clasificador de embeddings tiene baja confianza.
