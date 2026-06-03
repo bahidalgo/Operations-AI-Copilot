@@ -266,3 +266,8 @@ NOTA: El costo fijo de Generación de políticas escala en función de la cantid
 - Exponer el agente como API REST con FastAPI
 - Agregar soporte multilingüe con modelo de embeddings multilingüe
 - Mejorar `draft_response`, personalizar respuestas y permitir validación posterior de las mismas
+
+
+## Reflexión técnica
+
+Ver [reflexion.md](./reflexion.md)
