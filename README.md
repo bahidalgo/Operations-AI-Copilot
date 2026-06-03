@@ -39,16 +39,16 @@ run.py
         |-- classify_ticket()     embeddings + cosine similarity
         |     confianza >= 0.60 ---> predicted_type
         |     confianza <  0.60 ---> classify_with_llm()
-        |                               failed=False --> predicted_type
-        |                               failed=True  --> escalar a humano
+        |                               predicted_type
+        |                               (guardrail: si JSON invalido -> escalar a humano)
         |
         |-- lookup policies[predicted_type]
-        |     abstain=True  --> escalar, no hay política documentada
+        |     abstain=True  --> no hay política documentada, escalar a humano
         |     escalate=True --> derivar segun route_to
         |     escalate=False --> responder automáticamente (para una versión futura)
         |
         |-- draft_response()      genera respuesta para cliente y operador
-              abstain=True  --> cliente: ejecutivo se comunicará
+              abstain=True  --> cliente: un ejecutivo se comunicará
                                operador: revisar manualmente, sin política documentada
               abstain=False --> cliente: equipo correspondiente se comunicará
                                operador: instrucción con urgencia según prioridad y SLA
@@ -76,7 +76,7 @@ AI-Engineer-Testing/
 │   ├── test_policy.py
 │   └── test_agent.py
 └── 02_dataset/
-    ├── docs/                documentos internos de poíiticas
+    ├── docs/                documentos internos de políticas
     └── tickets/             train y test sets
 ```
 
@@ -121,6 +121,18 @@ PYTHONPATH=src pytest tests/ -v
 
 ---
 
+## Decisiones técnicas
+
+**Por qué embeddings y no TF-IDF:** TF-IDF no captura semántica — "refrigerated cargo" y "reefer deviation" son distintos para TF-IDF pero similares en significado. Los embeddings resuelven esto sin necesidad de más datos.
+
+**Por qué Ollama local y no API externa:** presupuesto limitado y sin dependencia de conectividad. El costo por llamada es cero y el modelo queda en la infraestructura propia.
+
+**Por qué el JSON de políticas se genera offline:** las políticas son decisiones de negocio que un humano debe validar. Generarlas en runtime cada vez sería costoso, lento, y quitaría control al operador.
+
+**Por qué umbral de confianza 0.60:** ajustado empíricamente — con 0.50 algunos casos ambiguos pasaban con clasificación incorrecta. Un análisis de distribución con más datos permitiría ajustarlo con mayor rigor.
+
+---
+
 ## Enfoque de ML
 
 ### Clasificador principal — embeddings semanticos
@@ -128,18 +140,18 @@ PYTHONPATH=src pytest tests/ -v
 Modelo: `all-MiniLM-L6-v2` (sentence-transformers, 80MB, CPU/GPU).
 Approach: cosine similarity sobre los embeddings del train set.
 
-El modelo se carga una sola vez al arrancar y queda en memoria. Cada ticket nuevo se codifica y se compara contra todos los ejemplos de train. El tipo del vecino maś cercano es la predicción.
+El modelo se carga una sola vez al arrancar y queda en memoria. Cada ticket nuevo se codifica y se compara contra todos los ejemplos de train. El tipo del vecino más cercano es la predicción.
 
 Se eligió este modelo porque:
 - Funciona bien con pocos ejemplos de train (no requiere cientos de datos por clase)
-- Captura semántica, a priori "refrigerated cargo" y "reefer deviation" son similares aunque no compartan palabras
+- Captura semántica — "refrigerated cargo" y "reefer deviation" son similares aunque no compartan palabras
 - Es rápido en inferencia (~15ms por ticket en CPU, menos en GPU)
 
 **Umbral de confianza:** 0.60. Si la similitud coseno con el vecino mas cercano es menor a este valor, la prediccion se considera insuficiente y se activa fallback con LLM. Este umbral fue ajustado empíricamente, con 0.50 algunos casos ambiguos pasaban con clasificacion incorrecta, pero para una versión más estable, se recomienda hacer un análisis de distribución.
 
 ### Baseline — TF-IDF
 
-Se implementó un baseline con TF-IDF + KNN como punto de comparación, pero los resultados mostraron la limitacón de los métodos estadísticos con pocos datos.
+Se implementó un baseline con TF-IDF + KNN como punto de comparación, pero los resultados mostraron la limitación de los métodos estadísticos con pocos datos.
 
 ### Clasificador de respaldo — LLM
 
@@ -193,6 +205,20 @@ Los conflictos en este dataset son entre documentos vigentes y obsoletos, resuel
 
 ---
 
+## Restricciones del desafío
+
+**Presupuesto limitado:** todos los modelos corren localmente sin costo por llamada. Sin API key, sin dependencia de servicios externos.
+
+**Latencia:** el clasificador de embeddings responde en ~15ms. El LLM solo se invoca cuando la confianza es baja, minimizando las llamadas lentas (~0.3s con GPU).
+
+**Documentos contradictorios y desactualizados:** el filtro de vigencia descarta automáticamente documentos no Active. Los conflictos entre documentos Active requieren revisión humana del JSON generado.
+
+**Usuarios que preguntan mal:** el LLM de respaldo maneja lenguaje informal, mezclado o con errores gramaticales mejor que el clasificador de embeddings, que depende de similitud léxica.
+
+**Riesgo de autonomía:** el sistema no toma decisiones irreversibles de forma autónoma. Toda acción con escalamiento requiere un humano. Las políticas que determinan el flujo son validadas manualmente antes de entrar en producción.
+
+---
+
 ## Observabilidad
 
 Todos los módulos usan `logging` con timestamps y niveles `INFO` / `WARNING` / `ERROR`. Los logs muestran:
@@ -213,7 +239,9 @@ Todos los módulos usan `logging` con timestamps y niveles `INFO` / `WARNING` / 
 | Generacion de politicas | $0 | 4s de compute, una vez por cambio de docs con GPU|
 
 El sistema no tiene costo variable por llamada, todos los modelos corren localmente.
-El costo real es de infraestructura, el sistema requiere mínimo 8GB RAM para cargar ambos modelos en memoria simultáneamente. Como referencia de costos en AWS (región us-east-1, Linux, bajo demanda): una instancia t4g.large (8GB RAM, sin GPU) cuesta USD 0.0672/hora (menos de USD 12/mes operando 8 horas diarias en días laborales). Para reducir la latencia del LLM de 0.3s, una instancia g4dn.xlarge (16GB RAM, GPU T4) cuesta USD 0.526/hora, aproximadamente USD 90/mes en las mismas condiciones.
+El costo real es de infraestructura, el sistema requiere mínimo 8GB RAM para cargar ambos modelos en memoria simultáneamente. Como referencia de costos en AWS (región us-east-1, Linux, bajo demanda): una instancia t4g.large (8GB RAM, sin GPU) cuesta USD 0.0672/hora (menos de USD 12/mes operando 8 horas diarias en días laborales). Para reducir la latencia del LLM a ~0.3s, una instancia g4dn.xlarge (16GB RAM, GPU T4) cuesta USD 0.526/hora, aproximadamente USD 90/mes en las mismas condiciones.
+
+NOTA: El costo fijo de Generación de políticas escala en función de la cantidad de documentos asociados.
 
 ---
 
@@ -221,7 +249,7 @@ El costo real es de infraestructura, el sistema requiere mínimo 8GB RAM para ca
 
 **Dataset pequeño:** el clasificador fue entrenado con 10 ejemplos. En producción se necesitarían al menos 50 ejemplos por clase para resultados robustos.
 
-**LLM 3b no es determinista:** aunque temperatura=0, el modelo puede variar en casos donde el contexto es insuficienteo ambiguo. Se observó esto en el ticket "cargo delayed, may lose supermarket slot" que en distintas ejecuciones clasificó como `shipment_exception` o `temperature_exception`.
+**LLM 3b no es determinista:** aunque temperatura=0, el modelo puede variar en casos donde el contexto es insuficiente o ambiguo. Se observó esto en el ticket "cargo delayed, may lose supermarket slot" que en distintas ejecuciones clasificó como `shipment_exception` o `temperature_exception`.
 
 **Idioma:** el clasificador de embeddings usa `all-MiniLM-L6-v2`, entrenado principalmente en inglés. Tickets en otros idiomas tendrán menor calidad de clasificación. De todas formas existe soporte multilingüe, pero no fue revisado en esta demo.
 
@@ -231,7 +259,7 @@ El costo real es de infraestructura, el sistema requiere mínimo 8GB RAM para ca
 
 ## Que mejoraría con una semana mas
 
-- Agregar mas datos de train al menos 50 ejemplos por clase para mejorar accuracy del clasificador
+- Agregar mas datos de train, al menos 50 ejemplos por clase para mejorar accuracy del clasificador
 - Reemplazar Ollama por un modelo mas capaz para casos ambiguos
 - Agregar evaluación automática del test set con labels manuales
 - Exponer el agente como API REST con FastAPI
